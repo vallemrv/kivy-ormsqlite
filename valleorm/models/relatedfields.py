@@ -4,7 +4,7 @@
 # @Date:   29-Aug-2017
 # @Email:  valle.mrv@gmail.com
 # @Last modified by:   valle
-# @Last modified time: 23-Dec-2017
+# @Last modified time: 29-Dec-2017
 # @License: Apache license vesion 2.0
 
 import sys
@@ -50,7 +50,7 @@ class OneToManyField(RelationShip):
         super(OneToManyField, self).__init__(othermodel, **kargs)
         self.class_name = "OneToManyField"
         if self.field_related_name == None and self.main_class != None:
-            self.field_related_name = self.main_class.table_name+"_id"
+            self.field_related_name = self.main_class.db_table+"_id"
 
     def get(self, **condition):
         if self.related_class == None:
@@ -71,10 +71,10 @@ class OneToManyField(RelationShip):
         child.save()
 
 class ForeignKey(RelationShip):
-    def __init__(self, othermodel, delete=constant.CASCADE, **kargs):
+    def __init__(self, othermodel, on_delete=constant.CASCADE, **kargs):
         super(ForeignKey, self).__init__(othermodel, **kargs)
         self.class_name = "ForeignKey"
-        self.on_delete = delete
+        self.on_delete = on_delete
 
     def get_choices(self, **condition):
         return self.related_class.getAll(**condition)
@@ -87,20 +87,21 @@ class ForeignKey(RelationShip):
     def get(self):
         if self.related_class == None:
             self.related_class = create_class_related(self.main_class.__module__, self.related_name)
-        reg = self.related_class(dbName=self.main_class.dbName)
+        reg = self.related_class(db_name=self.main_class.db_name)
         reg.load_by_pk(getattr(self.main_class, self.field_name_id))
         return reg
 
 class ManyToManyField(RelationShip):
 
-    def __init__(self, othermodel, delete=constant.CASCADE, **kargs):
+    def __init__(self, othermodel, db_table_nexo=None,  **kargs):
         super(ManyToManyField, self).__init__(othermodel, **kargs)
         self.class_name = "ManyToManyField"
+        self.db_table_nexo = db_table_nexo
+
 
         if self.main_class != None:
             self.tb_name_main = self.main_class.__class__.__name__.lower()
             self.tb_name_related = self.related_name.lower()
-            self.tb_nexo_name = self.tb_name_main+"_"+self.tb_name_related
             if self.field_related_id == None:
                 self.field_name_id = self.tb_name_main + "_id"
                 self.field_related_id = self.tb_name_related + "_id"
@@ -113,7 +114,7 @@ class ManyToManyField(RelationShip):
         frgKey += u"FOREIGN KEY({0}) REFERENCES {1}(id) ON DELETE CASCADE"
         frgKey = frgKey.format(self.field_related_id, self.tb_name_related)
         sql = u"CREATE TABLE IF NOT EXISTS {0} ({1}, {2} ,{3}, {4});"
-        sql = sql.format(self.tb_nexo_name, self.field_name_id+" INTEGER NOT NULL",
+        sql = sql.format(self.db_table_nexo, self.field_name_id+" INTEGER NOT NULL",
                          self.field_related_id+" INTEGER NOT NULL ",key, frgKey)
 
 
@@ -123,8 +124,8 @@ class ManyToManyField(RelationShip):
     def get(self, **condition):
         condition["columns"] = [self.tb_name_related+".*"]
 
-        condition["joins"] = [(self.tb_nexo_name + " ON "+ \
-                             self.tb_nexo_name+"."+self.field_related_id+\
+        condition["joins"] = [(self.db_table_nexo + " ON "+ \
+                             self.db_table_nexo+"."+self.field_related_id+\
                              "="+self.tb_name_related+".id")]
         query = self.field_name_id+"="+str(self.main_class.id)
         if 'query' in condition:
@@ -143,13 +144,12 @@ class ManyToManyField(RelationShip):
             child.save()
             cols = [self.field_name_id, self.field_related_id]
             values = [str(self.main_class.id), str(child.id)]
-            sql = u"INSERT OR REPLACE INTO {0} ({1}) VALUES ({2});".format(self.tb_nexo_name,
+            sql = u"INSERT OR REPLACE INTO {0} ({1}) VALUES ({2});".format(self.db_table_nexo,
                                                                ", ".join(cols), ", ".join(values));
-            print sql
             self.main_class.execute(sql)
 
     def delete(self, child):
-        sql = u"DELETE FROM {0} WHERE {1}={2}  AND {3}={4};".format(self.tb_nexo_name,
+        sql = u"DELETE FROM {0} WHERE {1}={2}  AND {3}={4};".format(self.db_table_nexo,
                                                                     self.field_name_id,
                                                                     child.id,
                                                                     self.field_related_id,

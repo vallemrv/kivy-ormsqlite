@@ -5,7 +5,7 @@
 # @Email:  valle.mrv@gmail.com
 # @Filename: field.py
 # @Last modified by:   valle
-# @Last modified time: 22-Dec-2017
+# @Last modified time: 27-Dec-2017
 # @License: Apache license vesion 2.0
 
 import importlib
@@ -19,7 +19,7 @@ from datetime import date, datetime
 class Field(object):
     def __init__(self, null=False, default=None, unique=False, **options):
         self.tipo_class = constant.TIPO_CAMPO
-        self.field_name = None
+        self.db_column = None
         self.default = default
         self.null = null
         self.tipo = 'TEXT'
@@ -29,9 +29,11 @@ class Field(object):
             setattr(self, k, v)
 
 
-    def get_pack_dato(self, key):
+    def get_pack_dato(self):
         dato = self.get_dato()
-        if self.null == True and dato == None:
+        if self.null == False and dato == None:
+            raise ValueError("No se puden guardar valores nulos")
+        elif self.null == True and dato == None:
             return 'NULL'
         elif self.tipo in  ["TEXT", "VARCHAR"]:
             return u'"{0}"'.format(unicode(dato))
@@ -52,10 +54,6 @@ class Field(object):
 
 
     def get_dato(self):
-        if self.dato == None and self.null == False:
-            raise ValueError("%s no puede conterner valor null" % self.field_name)
-        elif self.dato == 'NULL':
-            self.dato = None
         return self.dato
 
     def set_dato(self, value):
@@ -64,8 +62,9 @@ class Field(object):
 
     def get_serialize_data(self, key):
         obj_return = self.__dict__
-        obj_return['field_name'] = key
-        self.field_name = key
+        if self.db_column == None:
+            obj_return['db_column'] = key
+            self.db_column = key
         return  obj_return
 
     def getStrTipo(self):
@@ -91,10 +90,30 @@ class CharField(Field):
                 self.dato = value[:self.max_length-how_long]
             else:
                 self.dato = value
+        else:
+            self.dato = value
 
 
     def getStrTipo(self):
         return "VARCHAR(%s)" % self.max_length
+
+
+class AutoField(Field):
+    def __init__(self, primary_key=True, **options):
+        options["null"]=True
+        options["unique"]=False
+        options["default"]=None
+        super(AutoField, self).__init__(**options)
+        self.tipo="INTEGER"
+        self.class_name = "AutoField"
+        self.primary_key=primary_key
+        self.dato = -1
+
+
+    def getStrTipo(self):
+        str_primary_key = "PRIMARY KEY" if self.primary_key else ""
+        return "INTEGER %s AUTOINCREMENT" % str_primary_key
+
 
 class EmailField(CharField):
     def __init__(self, max_length=254, null=False, default=None, unique=False, **options):
@@ -115,18 +134,17 @@ class DecimalField(Field):
         self.class_name = "DecimalField"
 
     def set_dato(self, value):
-        super(DecimalField, self).set_dato(value)
         if type(value) in (unicode, str):
             self.dato = float(value.replace(",", "."))
         else:
             self.dato = value
 
     def get_dato(self):
-        self.dato = super(DecimalField, self).get_dato()
         if type(self.dato) in [float, int]:
             dato = "%."+str(self.decimal_places)+"f"
             dato = dato % self.dato
             return str(dato)
+        return self.dato
 
     def getStrTipo(self):
         return u"DECIMAL({0},{1})".format(self.max_digits, self.decimal_places)
@@ -146,7 +164,7 @@ class DateField(Field):
             self.dato = date.today()
         elif self.auto_now_add and self.dato == None:
             self.dato = date.today()
-        return super(DateField, self).get_dato()
+        return self.dato
 
     def set_dato(self, value):
         if type(value) == date:
@@ -169,7 +187,7 @@ class DateTimeField(Field):
             self.dato = datetime.now()
         elif self.auto_now_add and self.dato == None:
             self.dato = datetime.now()
-        return super(DateTimeField, self).get_dato()
+        return self.dato
 
     def set_dato(self, value):
         if type(value) == datetime:
