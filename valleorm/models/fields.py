@@ -5,13 +5,16 @@
 # @Email:  valle.mrv@gmail.com
 # @Filename: field.py
 # @Last modified by:   valle
-# @Last modified time: 27-Dec-2017
+# @Last modified time: 27-Feb-2018
 # @License: Apache license vesion 2.0
 
 import importlib
 import uuid
-from exceptions import ValueError
-from constant import constant
+try:
+    from exceptions import ValueError
+except Exception as e:
+    pass
+from .constant import constant
 from decimal import *
 from datetime import date, datetime
 
@@ -29,8 +32,9 @@ class Field(object):
             setattr(self, k, v)
 
 
-    def get_pack_dato(self):
-        dato = self.get_dato()
+    def get_pack_dato(self, dato=None):
+        if dato==None:
+            dato = self.get_dato()
         if self.null == False and dato == None:
             raise ValueError("No se puden guardar valores nulos")
         elif self.null == True and dato == None:
@@ -38,9 +42,9 @@ class Field(object):
         elif self.tipo in  ["TEXT", "VARCHAR"]:
             return u'"{0}"'.format(unicode(dato))
         elif self.tipo is "DATETIME":
-            return   u'"{0}"'.format(unicode(dato.strftime("%Y/%m/%d-%H:%M:%S.%f")))
+            return   u'"{0}"'.format(unicode(dato.strftime("%Y-%m-%d %H:%M:%S.%f")))
         elif self.tipo == "DATE":
-            return   u'"{0}"'.format(unicode(dato.strftime("%Y/%m/%d")))
+            return   u'"{0}"'.format(unicode(dato.strftime("%Y-%m-%d")))
         elif self.tipo == "BOOL":
             return 1 if self.dato == 1 or self.dato == True else 0
         else:
@@ -77,11 +81,12 @@ class Field(object):
         return u"{0} {1} {2} {3}".format(self.getStrTipo(), strnull, strdefault, strunique)
 
 class CharField(Field):
-    def __init__(self, max_length, null=False, default=None, unique=False, **options):
+    def __init__(self, label=None, max_length=None, null=False, default=None, unique=False, **options):
         super(CharField, self).__init__(null=null, default=default, unique=unique, **options)
         self.tipo="VARCHAR"
         self.class_name = "CharField"
         self.max_length=max_length
+        self.label = label
 
     def set_dato(self, value):
         if value != None:
@@ -99,7 +104,7 @@ class CharField(Field):
 
 
 class AutoField(Field):
-    def __init__(self, primary_key=True, **options):
+    def __init__(self, label=None, primary_key=True, **options):
         options["null"]=True
         options["unique"]=False
         options["default"]=None
@@ -116,18 +121,18 @@ class AutoField(Field):
 
 
 class EmailField(CharField):
-    def __init__(self, max_length=254, null=False, default=None, unique=False, **options):
-        super(EmailField, self).__init__(max_length, null=null, default=default, unique=unique, **options)
+    def __init__(self, label=None, max_length=254, null=False, default=None, unique=False, **options):
+        super(EmailField, self).__init__(max_length=max_length, null=null, default=default, unique=unique, **options)
         self.class_name = 'EmailField'
 
     def set_dato(self, value):
-        if value != None and not  ("@" in value and "." in value):
+        if value != None and value!="" and not ("@" in value and "." in value):
             raise ValueError('Formato email no valido')
         self.dato = value
 
 
 class DecimalField(Field):
-    def __init__(self, max_digits, decimal_places, null=False, default=None, unique=False, **options):
+    def __init__(self, label=None, max_digits=10, decimal_places=2, null=False, default=None, unique=False, **options):
         super(DecimalField, self).__init__(null=null, default=default, unique=unique, **options)
         self.max_digits=max_digits
         self.decimal_places=decimal_places
@@ -143,15 +148,15 @@ class DecimalField(Field):
         if type(self.dato) in [float, int]:
             dato = "%."+str(self.decimal_places)+"f"
             dato = dato % self.dato
-            return str(dato)
-        return self.dato
+        return float(dato)
+
 
     def getStrTipo(self):
         return u"DECIMAL({0},{1})".format(self.max_digits, self.decimal_places)
 
 
 class DateField(Field):
-    def __init__(self, auto_now=False, auto_now_add=True, null=False, default=None, unique=False, **options):
+    def __init__(self, label=None, auto_now=False, auto_now_add=True, null=False, default=None, unique=False, **options):
         super(DateField, self).__init__(null=null, default=default, unique=unique, **options)
         self.tipo="DATE"
         self.class_name = "DateField"
@@ -170,16 +175,17 @@ class DateField(Field):
         if type(value) == date:
             self.dato = date
         else:
-            self.dato = date(*value.split("/"))
+            fecha_split = value.split("-")
+            self.dato = date(int(fecha_split[0]), int(fecha_split[1]), int(fecha_split[2]))
 
 
 
 class DateTimeField(Field):
-    def __init__(self, auto_now=False, auto_now_add=False, null=False, default=None, unique=False, **options):
+    def __init__(self, label=None, auto_now=False, auto_now_add=False, null=False, default=None, unique=False, **options):
         super(DateTimeField, self).__init__(null=null, default=default, unique=unique, **options)
         self.tipo="DATETIME"
         self.class_name = "DateTimeField"
-        self.auto_now=auto_now
+        self.auto_now = auto_now
         self.auto_now_add=auto_now_add
 
     def get_dato(self):
@@ -193,7 +199,7 @@ class DateTimeField(Field):
         if type(value) == datetime:
             self.dato = value
         else:
-            self.dato = datetime.strptime(value,"%Y/%m/%d-%H:%M:%S.%f")
+            self.dato = datetime.strptime(value.replace("T", " "),"%Y-%m-%d %H:%M:%S.%f")
 
 
 
@@ -212,21 +218,21 @@ class BooleanField(Field):
 
 
 class IntegerField(Field):
-    def __init__(self, null=False, default=None, unique=False, **options):
+    def __init__(self, label=None, null=False, default=None, unique=False, **options):
         super(IntegerField, self).__init__(null=null, default=default, unique=unique, **options)
         self.tipo="INTEGER"
         self.class_name = "IntegerField"
 
 
 class FloatField(Field):
-    def __init__(self, **options):
+    def __init__(self, label=None, null=False, default=None, unique=False, **options):
         super(FloatField, self).__init__(null=null, default=default, unique=unique, **options)
         self.tipo="REAL"
         self.class_name = "FloatField"
 
 
 class TextField(Field):
-    def __init__(self, **options):
+    def __init__(self, label=None, null=False, default=None, unique=False, **options):
         super(TextField, self).__init__(null=null, default=default, unique=unique, **options)
         self.tipo="TEXT"
         self.class_name = "TextField"
@@ -234,7 +240,7 @@ class TextField(Field):
 
 class UUIDField(Field):
     def __init__(self, **options):
-        super(UUIDField, self).__init__(null=null, default=default, unique=unique, **options)
+        super(UUIDField, self).__init__(null=False, default=default, unique=True, **options)
         self.class_name = "UUIDField"
         self.tipo="TEXT"
         self.unique = True

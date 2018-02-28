@@ -4,7 +4,7 @@
 # @Date:   29-Aug-2017
 # @Email:  valle.mrv@gmail.com
 # @Last modified by:   valle
-# @Last modified time: 29-Dec-2017
+# @Last modified time: 26-Feb-2018
 # @License: Apache license vesion 2.0
 
 from datetime import date, datetime
@@ -24,6 +24,7 @@ class Model(object):
         self.foreingKeys = []
         self.db_table = self.__class__.__name__.lower()
         self.db_name = db_name
+        self.__crea_tb_relationship__()
         if hasattr(self, 'Meta'):
             meta = getattr(self, 'Meta')
             if hasattr(meta, "db_table"):
@@ -37,11 +38,33 @@ class Model(object):
 
         for k, v in options.items():
             if k not in self.lstCampos:
-                raise AttributeError("Este modelo no contine %s" % k)
+                continue
             if k == 'id':
                 self.load_by_pk(v)
             setattr(self, k, v)
 
+    def __save_relationship__(self, main_class, relate_class, tipo):
+        sql = "SELECT id FROM relationship_db WHERE main_class='%s' AND relate_class='%s';"
+        sql = sql % (main_class, relate_class)
+        reg = Model.execute_select(sql)
+        if len(reg) <= 0:
+            sql = u"INSERT OR REPLACE INTO relationship_db (main_class, relate_class, tipo) VALUES ('{0}','{1}', '{2}');"
+            sql = sql.format(main_class, relate_class, tipo)
+            self.execute(sql)
+
+    def __crea_tb_relationship__(self):
+        IDprimary = "ID INTEGER PRIMARY KEY AUTOINCREMENT"
+        sql = "CREATE TABLE IF NOT EXISTS relationship_db (%s, main_class TEXT, relate_class TEXT, tipo TEXT);"
+        sql = sql % IDprimary
+        self.execute(sql)
+
+    def __get_relationship__(self):
+        sql = "SELECT * FROM relationship_db WHERE main_class='%s'" % self.__class__.__name__
+        return Model.execute_select(sql)
+
+
+    def __unicode__(self):
+        return  unicode(self)
 
 
     def __setattr__(self, attr, value):
@@ -79,6 +102,9 @@ class Model(object):
                                                    field_related_name=field.field_related_name,
                                                    field_related_id=field.field_related_id))
 
+                self.__save_relationship__(field.related_name, self.__class__.__name__, field.class_name)
+
+
                 if field.class_name in "ForeignKey":
                     setattr(self, field.field_name_id, IntegerField(db_column=field.field_name_id))
                     self.lstCampos.append(field.field_name_id)
@@ -99,11 +125,24 @@ class Model(object):
                         else:
                             rel.db_table_nexo = table_nexo
 
+
         if 'id' not in self.lstCampos:
             self.id = AutoField(primary_key=True, db_column='id')
             self.lstCampos.append("id")
 
         self.__create_if_not_exists__()
+        self.__crear_relationship__()
+
+
+    def __crear_relationship__(self):
+        rel = self.__get_relationship__()
+        for r in rel:
+            if r["tipo"] == "ForeignKey":
+                setattr(self, r["relate_class"].lower()+"_set",
+                        OneToManyField(self, r["relate_class"]))
+            elif r["tipo"] == "ManyToManyField":
+                setattr(self, r["relate_class"].lower()+"_set",
+                        ManyToManyChild(self, r["relate_class"]))
 
 
 
@@ -178,8 +217,7 @@ class Model(object):
         self.id = -1 if self.id == None else self.id
         sql = u"DELETE FROM {0} WHERE id={1};".format(self.db_table, self.id)
         self.execute(sql)
-        self.id = -1
-
+        
 
     def empty(self):
         self.id = -1;
@@ -195,6 +233,11 @@ class Model(object):
             db.commit()
             db.close()
 
+    def pack_dato(self, dato):
+        if type(dato) in [int, float]:
+            return  dato
+        else:
+            return "'%s'" % dato
 
     def load_by_pk(self, pk):
         sql = u"SELECT * FROM {0} WHERE id={1};".format(self.db_table, pk)
@@ -221,9 +264,9 @@ class Model(object):
                 v =  getattr(self, key)
                 if not (v == None or v == "NULL"):
                     if type(v) == date:
-                        js[key] = v.strftime("%Y/%m/%d")
+                        js[key] = v.strftime("%Y-%m-%d")
                     elif type(v) == datetime:
-                        js[key] = v.strftime("%Y/%m/%d-%H:%M:%S.%f")
+                        js[key] = v.strftime("%Y-%m-%d %H:%M:%S.%f")
                     else:
                         js[key] = v
         return js
@@ -257,6 +300,16 @@ class Model(object):
         return registros
 
     @classmethod
+    def get_db_table(cls):
+        db_table = cls.__name__.lower()
+        if hasattr(cls, 'Meta'):
+            meta = getattr(cls, 'Meta')
+            if hasattr(meta, "db_table"):
+                self.db_table = getattr(meta, "db_table")
+        return db_table
+
+
+    @classmethod
     def filter(cls, db_name="db.sqlite3", **condition):
         db_table = cls.__name__.lower()
         ordering = None
@@ -267,11 +320,24 @@ class Model(object):
             if hasattr(meta, "db_name"):
                 db_name = getattr(meta, "db_name")
             if hasattr(meta, "ordering"):
-                ordering = ", ".join(getattr(meta, "ordering"))
+                ord = getattr(meta, "ordering")
+                ord_aux = []
+                for o in ord:
+                    if "-" in o:
+                        ord_aux.append(o[1:]+" DESC")
+                    else:
+                        ord_aux.append(o.replace("+",""))
+                ordering = ", ".join(ord_aux)
 
         columns = "*"
         order, query, limit,  offset, joins, group = ("", )*6
+        obj = cls();
         for k, v in condition.items():
+            if hasattr(obj, k):
+                if query == "":
+                    query = "WHERE %s=%s" % (k, obj.pack_dato(v))
+                else:
+                    query += " AND %s=%s" % (k, val.pack_dato(v))
             if k == 'columns':
                 columns = ", ".join(v)
             elif k == 'order':
@@ -294,10 +360,28 @@ class Model(object):
                 order = "ORDER BY %s" % unicode(ordering)
 
 
+
         sql = u"SELECT {0} FROM {1} {2} {3} {4} {5} {6} {7};".format(columns, db_table,
                                                          joins, query, order, group, limit, offset)
+
         return cls.select(sql, db_name)
 
+    @staticmethod
+    def execute_select(sql, db_name="db.sqlite3"):
+        db = sqlite3.connect(db_name)
+        cursor= db.cursor()
+        cursor.execute(sql)
+        reg = cursor.fetchall()
+        d = cursor.description
+        db.commit()
+        db.close()
+        registros = []
+
+        for r in reg:
+            res = dict({k[0]: v for k, v in list(zip(d, r))})
+            registros.append(res)
+
+        return registros
 
     @staticmethod
     def getenerate_joins(joins):
@@ -349,7 +433,7 @@ class Model(object):
         return registros
 
     @staticmethod
-    def drop_db(db_name):
+    def drop_db(db_name='db.sqlite3'):
         sql = "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE '%sqlite%';"
         db = sqlite3.connect(db_name)
         cursor= db.cursor()

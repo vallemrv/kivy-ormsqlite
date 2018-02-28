@@ -2,13 +2,13 @@
 # @Date:   29-Aug-2017
 # @Email:  valle.mrv@gmail.com
 # @Last modified by:   valle
-# @Last modified time: 26-Dec-2017
+# @Last modified time: 27-Feb-2018
 # @License: Apache license vesion 2.0
 
-from constant import constant
-from fields import *
-from relatedfields import *
-from model import Model
+from .constant import constant
+from .fields import *
+from .relatedfields import *
+from .model import Model
 
 CASCADE = constant.CASCADE
 SET_NULL = constant.SET_NULL
