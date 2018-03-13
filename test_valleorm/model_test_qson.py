@@ -4,7 +4,7 @@
 # @Date:   20-Dec-2017
 # @Email:  valle.mrv@gmail.com
 # @Last modified by:   valle
-# @Last modified time: 01-Jan-2018
+# @Last modified time: 05-Feb-2018
 # @License: Apache license vesion 2.0
 
 
@@ -14,16 +14,14 @@ import sys
 import names
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from valleorm import models, QSonSender, QSonHelper
-
+from valleorm import models, QSonSender, QSonHelper, QSonQH
 # Create your models here.
 class Users(models.Model):
    nombre = models.CharField(max_length=120)
-   puesto = models.ManyToManyField("Puestos")
 
    class Meta:
        db_table = "usuarios"
-       ordering = ["id DESC"]
+       ordering = ["-id", "nombre"]
 
 
 class Salario(models.Model):
@@ -49,5 +47,20 @@ salir = False
 def on_success(req, result):
     print result
 
+
 qson = ClasesQson()
-qson.send_get(on_success, wait=True, qsonhelper=(wrap,))
+
+#qson.all(on_success=on_success, models=(Puestos,), wait=True)
+
+qsonqh = QSonQH(Users, )
+qsonqh.append_child(QSonQH(Puestos,))
+qson.filter(on_success=on_success, qsonqh=(qsonqh,), wait=True)
+
+
+'''
+puesto = Puestos(id=1,)
+
+qhelper = QSonHelper(Puestos(id=1,))
+qhelper.append_child(Users(id=17), 'user' )
+qson.save(on_success=on_success, qsonhelper=(qhelper,), wait=True)
+'''

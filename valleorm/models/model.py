@@ -12,9 +12,9 @@ import sqlite3
 import json
 import base64
 
-from constant import constant
-from fields import *
-from relatedfields import *
+from .constant import constant
+from .fields import *
+from .relatedfields import *
 
 
 
@@ -217,7 +217,8 @@ class Model(object):
         self.id = -1 if self.id == None else self.id
         sql = u"DELETE FROM {0} WHERE id={1};".format(self.db_table, self.id)
         self.execute(sql)
-        
+        self.id = -1
+
 
     def empty(self):
         self.id = -1;
